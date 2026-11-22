@@ -1,85 +1,76 @@
 # 逗比人生 · 64 位重制增强版 (Doubi Life Remastered)
 
-经典文字模拟游戏《逗比人生》（原版 v0.922, 2015–2017）的现代纯 64 位 Android 重制增强版与单文件 Web 版。
+经典文字模拟游戏《逗比人生》（原版 v0.922, 2015–2017）的现代纯 64 位 Android APK 重制增强版。
 
-- **当前版本**：`v0.922+`（Android `versionCode = 24`，包名沿用原版 `game.msgjug.doubi`）
-- **兼容目标**：现代纯 64 位 Android 设备（`minSdkVersion = 28`，已验证兼容 Android 16 纯 64 位架构）及任意现代桌面/移动端浏览器
+- **当前版本**：`v0.922+`（Android `versionCode = 25`，包名沿用原版 `game.msgjug.doubi`）
+- **兼容目标**：现代纯 64 位 Android 设备（`minSdkVersion = 28`，已通过 Android 16 纯 64 位签名与对齐校验）
 
 ## 核心特性
 
 - **1:1 忠实还原原版美学与内容**
   - 完整保留原版 **1,181 个经典事件**、**46 项原版成就**、**131 条背包 Mod 规则** 与原版和谐词库。
-  - 严格保持原版 `1080×1920` 竖屏纯黑（`#000000`）+ 荧光绿（`#00d980`）视觉风格、原版贴图、BGM 与 OGG 音效。
-- **200+ 现代事件与 54 项新增成就扩充**
-  - 新增 **200 个现代事件**（`id: 2001..2200`，总事件数 **1,381**），涵盖当代社会现实、职场、体制、AI、二次元与游戏梗，并与原版世界观深度联动。
-  - 每个新增事件均保证至少 **3 个无条件可见选项**，并支持原版前置标签/背景条件的隐藏分支。
-  - 新增 **54 项成就**（总成就数 **100**）与 **106 条新增背包规则**（总计 **237** 条）。
-- **新增实用功能**
-  - **事件图鉴**：支持防剧透（战争迷雾）开关、原版/新增与已解锁/未解锁筛选、关键词检索与分支详情查看。
-  - **存档管理**：支持一键复制/粘贴存档码以及 JSON 存档文件导入/导出，支持后台自动续玩与本地 20 槽位墓地。
-- **零原生 `.so` 依赖的纯 64 位 Android 容器**
-  - 彻底剥离原版 32 位 `armeabi-v7a` Cocos2d-x `.so` 与加固壳，采用极简纯 Dalvik `classes.dex` + 原生全屏 `WebView` 架构，支持系统返回手势桥接与软键盘防挤压布局。
+  - 严格保持原版 `1080×1920` 竖屏纯黑（`#000000`）+ 荧光绿（`#00d980`）视觉风格、原始贴图、BGM 与 OGG 音效。
+- **360 个高密度人味扩充事件与 82 项新增成就（总计 1,541 事件 / 128 成就 / 1,120 背包规则）**
+  - **6 个全新开局出身（`未出生`）**：小镇做题家、城中村拆迁户二代、县城体面人家、网红家庭萌娃、双职工散养童年、祖传土偏方世家。
+  - **4 大封闭副本（`closeBG`）**：`康养旅居团`、`电诈园区`（扩充至 11 条）、`MCN孵化基地`、`AI碳基保护区`（接轨原版阿尔法狗/天网世界观），全部通过多轮随机逃脱压测（零卡死）。
+  - **多条完整当代职业与身份树**：`特聘砖家`、`外卖骑手→区域站长`、`夜市摊主`、`发廊学徒`/`托尼老师`、`自媒体大V`（含 `passTime: 0` 同龄塌房连环剧）、`单位中层`。
+  - **强蝴蝶效应与跨十年回旋镖**：唤醒 **47 个原版 2017 沉睡标签**（`三聚氰胺抗体`、`痔疮`、`朋友：智子`、`索尼大法信徒`、`广场舞`、`网购狂人`、`新能源部门` 等），扩充事件平均 **5.63 个选项**，**98.3%** 含前置标签隐藏分支，**100%** 选项具实质后果，新造标签 100% 闭环消费。
+  - **补齐童年（0–15 岁）与银发晚年（60–95 岁）断层**，并新增男女视角差异事件（`sexCond`）与幽默背包属性彩蛋。
+- **针对纯 64 位 Android APK 的硬伤修复与体验打磨**
+  - **切后台/锁屏自动暂停 BGM** + 音效实例预加载，杜绝后台外放与解码卡顿。
+  - **跨周目龙珠持久保存**：收集到的龙珠写入持久存档并纳入备份，不再随死亡或重启丢失。
+  - **Gzip 压缩存档码（`DOUBI2:`）**：体积压缩约 75%，完整备份墓地、成就、图鉴、跨周目龙珠与进行中对局（兼容旧版明文 JSON 恢复），并针对 APK WebView 自动精简无效文件选择按钮。
+  - **细节完善**：全量 HTML 安全转义、成就一览多维筛选、图鉴真防剧透检索与状态记忆、本局成就记录真实解锁年龄、局内返回手势呼出游戏菜单、单墓碑清理与死亡页一键复制生平简报。
 
 ## 目录结构
 
 ```text
 .
-├── index.html                  # 单文件完整版（含 HTML/CSS/JS 引擎、数据与 67 个内联 Base64 素材，可直接浏览器打开游玩）
-├── data/                       # 独立导出的全量 JSON 数据集（与 index.html 保持严格一致）
-│   ├── evtLib_expanded.json    # 1,381 条事件库
-│   ├── goalLib_expanded.json   # 100 项成就库
-│   ├── evtPath_expanded.json   # 237 条背包 Mod 属性规则
+├── index.html                  # APK 内置核心单文件前端（与 assets/index.html 字节一致）
+├── data/                       # 单一数据源 JSON（编辑后用 scripts/sync_data.mjs 回灌 index.html）
+│   ├── evtLib_expanded.json    # 1,541 条事件库（原版 1,181 + 扩充 360）
+│   ├── goalLib_expanded.json   # 128 项成就库（原版 46 + 新增 82）
+│   ├── evtPath_expanded.json   # 1,120 条背包与属性规则
 │   └── heXie.json              # 原版和谐词库
-├── android/                    # 纯 64 位 Android APK 打包模板资源
-│   ├── AndroidManifest.xml     # 原位二进制修补版 Manifest（v24 / minSdk 28）
+├── android/                    # 纯 64 位无 .so 容器模板
+│   ├── AndroidManifest.xml     # 原位二进制修补版 Manifest（v25 / minSdk 28）
 │   ├── classes.dex             # 极简 Dalvik WebView 启动器与返回手势桥接（1,448 B）
 │   ├── resources.arsc          # 编译后的应用资源表
 │   └── res/                    # 应用图标与布局资源
 ├── scripts/
-│   ├── verify.mjs              # 数据一致性、CSS 色值、选项底线与自动化校验脚本
-│   └── build_apk.py            # 纯 64 位 APK 打包与 V1+V2 签名脚本（4 字节对齐，适配 Android 16）
+│   ├── sync_data.mjs           # data/*.json -> index.html 单向同步脚本
+│   ├── verify.mjs              # 语法、CSS、数据一致性、标签闭环、选项底线与禁用套话校验
+│   ├── sim_test.mjs            # 单元测试 + 500 局随机人生与 4 大副本逃脱回归压测
+│   ├── build_apk.py            # 纯 64 位 APK 打包与 V1+V2 签名脚本（4 字节对齐）
+│   └── verify_apk.py           # V1 PKCS#7 + V2 Merkle/RSA 加密签名与对齐独立验签脚本
 └── docs/
     └── HANDOVER.md             # 工程架构、设计红线与开发避坑指南
 ```
 
-## 快速开始
+## 构建与验收流程
 
-### 1. 浏览器直接游玩
-
-直接用任意现代浏览器打开根目录的 [`index.html`](index.html) 即可离线完整游玩。
-
-### 2. 数据与完整性校验
+需要 `node`、`python3` 与 `openssl`（无需安装 Android SDK）：
 
 ```bash
-node scripts/verify.mjs
+# 1. 修改 data/*.json 后同步回灌 index.html
+node scripts/sync_data.mjs
+
+# 2. 全量静态校验（含零 AI 套话严格模式与标签闭环检查）
+node scripts/verify.mjs --strict-cliche
+
+# 3. 运行单元测试 + 500 轮随机人生与全副本防卡死压测
+node scripts/sim_test.mjs
+
+# 4. 构建纯 64 位 V1+V2 签名 APK（首次自动生成本地持久化 keystore/，不入库）
+python3 scripts/build_apk.py --out dist/doubi-life-64bit-v25.apk
+
+# 5. 独立加密验签与 Android 16 布局校验
+python3 scripts/verify_apk.py dist/doubi-life-64bit-v25.apk
 ```
 
-校验内容包括：
-- `index.html` 内联常量与 `data/*.json` 的严格一致性
-- CSS 中全部 Hex 颜色值合法性（防止全局替换破坏主题色 `#00d980`）
-- 所有 `id >= 2000` 新增事件至少包含 3 个无门槛可见选项
-- 所有 `target` 事件跳转 ID 与 `goal` 成就 ID 的有效性
-
-### 3. 构建纯 64 位 Android APK
-
-需要 `python3` 与 `openssl`（无需安装 Android SDK）：
-
-```bash
-# 使用已有签名证书构建（推荐，保持覆盖安装签名一致）
-python3 scripts/build_apk.py \
-  --out dist/doubi-life-64bit-v24.apk \
-  --key keystore/release.key \
-  --cert keystore/release.crt
-
-# 首次本地测试构建（自动在 keystore/ 生成持久化本地证书，不会提交到 Git）
-python3 scripts/build_apk.py --out dist/doubi-life-64bit-v24.apk
-```
-
-如需升级版本号，可传入 `--version-code 25`（脚本将在 `AndroidManifest.xml` 偏移 `2472` 处执行原位修补，避免破坏二进制 XML 结构）。
-
-> **覆盖安装提示**：若更换签名证书重新构建 APK，Android 系统会要求先卸载旧版再安装；卸载前请务必在游戏内 **「存档管理」** 导出或复制存档码进行备份。
+> **覆盖安装提示**：请妥善保存本地 `keystore/` 下的签名证书以支持后续无缝覆盖安装；若更换证书需要卸载重装，卸载前请务必在游戏内 **「存档管理」** 复制压缩存档码备份。
 
 ## 致谢与声明
 
 - 原版游戏《逗比人生 (Doubi living)》由 **MsgJug / WildPtr (2015–2017)** 及广大众创玩家共同创作。
-- 本项目旨在让这款经典文字游戏能够在现代纯 64 位 Android 系统与浏览器上继续运行和传承。
+- 本项目旨在让这款经典文字游戏能够在现代纯 64 位 Android 设备上持续流畅运行。
