@@ -1,0 +1,22 @@
+# Build outputs
+dist/
+build/
+*.apk
+*.zip
+
+# Local signing credentials (never commit private keys)
+keystore/
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.pem
+*.key
+
+# OS / Editor / Temp
+.DS_Store
+Thumbs.db
+*.swp
+__pycache__/
+*.pyc
+node_modules/
