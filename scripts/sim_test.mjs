@@ -132,6 +132,49 @@ const sandbox = {
     },
     execCommand: () => true,
   },
+  AudioContext: class MockAudioContext {
+    constructor() {
+      this.state = 'running';
+      this.destination = { kind: 'dest' };
+    }
+    createGain() { return { gain: { value: 1 }, connect() {} }; }
+    createBuffer(channels, length, sampleRate) {
+      const chs = Array.from({ length: channels }, () => new Float32Array(length));
+      return {
+        numberOfChannels: channels,
+        length,
+        sampleRate,
+        duration: length / sampleRate,
+        getChannelData: (c) => chs[c],
+      };
+    }
+    createBufferSource() {
+      return {
+        buffer: null,
+        loop: false,
+        loopStart: 0,
+        loopEnd: 0,
+        started: false,
+        stopped: false,
+        connect() {},
+        disconnect() {},
+        start() { this.started = true; },
+        stop() { this.stopped = true; },
+      };
+    }
+    decodeAudioData(ab, okCb) {
+      const sr = 16000;
+      const len = 1600;
+      const buf = this.createBuffer(1, len, sr);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) data[i] = Math.sin(i * 0.05) * 0.5;
+      if (okCb) okCb(buf);
+      return Promise.resolve(buf);
+    }
+    suspend() { this.state = 'suspended'; return Promise.resolve(); }
+    resume() { this.state = 'running'; return Promise.resolve(); }
+  },
+  Float32Array,
   Audio: class MockAudio {
     constructor(src) { this.src = src; this.paused = true; this.ended = false; this.currentTime = 0; this.loop = false; this.volume = 1; }
     play() { this.paused = false; return Promise.resolve(); }
@@ -173,17 +216,20 @@ const escaped = Helper.escHtml('<img src=x onerror="alert(1)">&\'');
 assert(!escaped.includes('<') && !escaped.includes('>'), 'Helper.escHtml must neutralize HTML tags');
 console.log('[OK]   HTML escaping verified');
 
-// 2. BGM visibilitychange auto-pause / resume test
+// 2. Web Audio API gapless BGM + visibilitychange suspend/resume test
 AudioSys.syncBgm(true);
-assert(AudioSys.bgmAudio && !AudioSys.bgmAudio.paused, 'BGM should be playing after syncBgm(true)');
+assert(AudioSys.bgmBuffer && AudioSys.bgmSource && AudioSys.bgmSource.started && AudioSys.bgmSource.loop === true,
+  'Web Audio gapless BGM source must start with loop=true');
+assert(AudioSys.bgmBuffer.length < 1600, 'BGM buffer should be seam-crossfaded for click-free looping');
 sandbox.document.hidden = true;
 (listeners.get('visibilitychange') || []).forEach(fn => fn());
-assert(AudioSys.bgmAudio.paused, 'BGM must auto-pause when document.hidden becomes true');
+assert(AudioSys.ctx.state === 'suspended', 'AudioContext must suspend when app goes to background');
 sandbox.document.hidden = false;
 (listeners.get('visibilitychange') || []).forEach(fn => fn());
-assert(!AudioSys.bgmAudio.paused, 'BGM must auto-resume when returning to foreground');
+assert(AudioSys.ctx.state === 'running', 'AudioContext must resume when app returns to foreground');
 AudioSys.syncBgm(false);
-console.log('[OK]   BGM background auto-pause/resume verified');
+assert(AudioSys.bgmSource === null, 'BGM source must stop and clear on syncBgm(false)');
+console.log('[OK]   Web Audio gapless BGM loop & background suspend/resume verified');
 
 // 3. Cross-life Dragon Ball persistence across death & storage reload
 GameEngine.attrs = { '金钱': 2000 };

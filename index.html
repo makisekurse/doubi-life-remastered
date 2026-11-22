@@ -1954,21 +1954,177 @@ function parseLooseArray(str) {
 }
 
 const AudioSys = {
+  ctx: null,
+  bgmGain: null,
+  sfxGain: null,
+  bgmBuffer: null,
+  bgmDecoding: false,
+  bgmSource: null,
+  sfxBuffers: {},
+  webAudioFailed: false,
   bgmAudio: null,
   bgmStarted: false,
   sfxPool: {},
   lifecycleBound: false,
+
+  _dataUrlToArrayBuffer(dataUrl) {
+    const b64 = String(dataUrl || '').split(',')[1] || '';
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes.buffer;
+  },
+
+  _makeSeamlessLoopBuffer(ctx, buf) {
+    const fade = Math.min(Math.floor(buf.sampleRate * 0.006), Math.floor(buf.length / 8));
+    if (fade < 8 || typeof ctx.createBuffer !== 'function') return buf;
+    const len = buf.length - fade;
+    const out = ctx.createBuffer(buf.numberOfChannels, len, buf.sampleRate);
+    for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+      const src = buf.getChannelData(ch);
+      const dst = out.getChannelData(ch);
+      dst.set(src.subarray(0, len));
+      for (let i = 0; i < fade; i++) {
+        const t = i / fade;
+        const wIn = Math.sin(t * Math.PI * 0.5);
+        const wOut = Math.cos(t * Math.PI * 0.5);
+        const v = src[i] * wIn + src[len + i] * wOut;
+        dst[i] = v > 1 ? 1 : (v < -1 ? -1 : v);
+      }
+    }
+    return out;
+  },
+
+  _ensureWebAudio() {
+    if (this.webAudioFailed) return null;
+    if (this.ctx) return this.ctx;
+    try {
+      const Ctx = (typeof window !== 'undefined') && (window.AudioContext || window.webkitAudioContext);
+      if (!Ctx) return null;
+      this.ctx = new Ctx();
+      this.bgmGain = this.ctx.createGain();
+      this.bgmGain.gain.value = 0.42;
+      this.bgmGain.connect(this.ctx.destination);
+      this.sfxGain = this.ctx.createGain();
+      this.sfxGain.gain.value = 0.58;
+      this.sfxGain.connect(this.ctx.destination);
+      return this.ctx;
+    } catch (e) {
+      this.webAudioFailed = true;
+      return null;
+    }
+  },
+
+  _decodeBgm() {
+    const ctx = this._ensureWebAudio();
+    if (!ctx || this.bgmBuffer || this.bgmDecoding || !ASSETS.bgm) return;
+    this.bgmDecoding = true;
+    try {
+      const ab = this._dataUrlToArrayBuffer(ASSETS.bgm);
+      const onDecoded = (decoded) => {
+        this.bgmDecoding = false;
+        this.bgmBuffer = this._makeSeamlessLoopBuffer(ctx, decoded);
+        if (this.bgmStarted && GameEngine.config.bgm && !(typeof document !== 'undefined' && document.hidden)) {
+          this._startWebAudioBgm();
+        }
+      };
+      const onErr = () => {
+        this.bgmDecoding = false;
+        this.webAudioFailed = true;
+        if (this.bgmStarted && GameEngine.config.bgm) this._startFallbackBgm();
+      };
+      const p = ctx.decodeAudioData(ab, onDecoded, onErr);
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch (e) {
+      this.bgmDecoding = false;
+      this.webAudioFailed = true;
+    }
+  },
+
+  _decodeSfx() {
+    const ctx = this._ensureWebAudio();
+    if (!ctx) return;
+    ['sfx_aff', 'sfx_goal', 'sfx_msg'].forEach(k => {
+      if (this.sfxBuffers[k] || !ASSETS[k]) return;
+      try {
+        const ab = this._dataUrlToArrayBuffer(ASSETS[k]);
+        const p = ctx.decodeAudioData(ab, (decoded) => {
+          this.sfxBuffers[k] = decoded;
+        }, () => {});
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      } catch (e) {}
+    });
+  },
+
+  _startWebAudioBgm() {
+    const ctx = this._ensureWebAudio();
+    if (!ctx || !this.bgmBuffer) return false;
+    if (ctx.state === 'suspended' && typeof ctx.resume === 'function') {
+      ctx.resume().catch(() => {});
+    }
+    if (this.bgmSource) return true;
+    try {
+      const src = ctx.createBufferSource();
+      src.buffer = this.bgmBuffer;
+      src.loop = true;
+      src.loopStart = 0;
+      src.loopEnd = this.bgmBuffer.duration;
+      src.connect(this.bgmGain);
+      src.start(0);
+      this.bgmSource = src;
+      return true;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  _stopWebAudioBgm() {
+    if (this.bgmSource) {
+      try { this.bgmSource.stop(0); } catch (e) {}
+      try { this.bgmSource.disconnect(); } catch (e) {}
+      this.bgmSource = null;
+    }
+  },
+
+  _startFallbackBgm() {
+    if (!this.bgmAudio && ASSETS.bgm && typeof Audio !== 'undefined') {
+      this.bgmAudio = new Audio(ASSETS.bgm);
+      this.bgmAudio.loop = true;
+      this.bgmAudio.volume = 0.42;
+    }
+    if (this.bgmAudio && !(typeof document !== 'undefined' && document.hidden)) {
+      this.bgmAudio.play().catch(() => {});
+    }
+  },
+
   init() {
     if (!this.lifecycleBound && typeof document !== 'undefined') {
       this.lifecycleBound = true;
       const pauseForBg = () => {
+        if (this.ctx && this.ctx.state === 'running' && typeof this.ctx.suspend === 'function') {
+          this.ctx.suspend().catch(() => {});
+        }
         if (this.bgmAudio && !this.bgmAudio.paused) {
           try { this.bgmAudio.pause(); } catch (e) {}
         }
       };
       const resumeForFg = () => {
-        if (!document.hidden && this.bgmStarted && GameEngine.config.bgm && this.bgmAudio) {
+        if (document.hidden || !this.bgmStarted || !GameEngine.config.bgm) return;
+        if (this.ctx && !this.webAudioFailed) {
+          if (this.ctx.state === 'suspended' && typeof this.ctx.resume === 'function') {
+            this.ctx.resume().catch(() => {});
+          }
+          if (this.bgmBuffer && !this.bgmSource) this._startWebAudioBgm();
+        } else if (this.bgmAudio) {
           this.bgmAudio.play().catch(() => {});
+        }
+      };
+      const unlockOnce = () => {
+        if (this.ctx && this.ctx.state === 'suspended' && typeof this.ctx.resume === 'function') {
+          this.ctx.resume().catch(() => {});
+        }
+        if (this.bgmStarted && GameEngine.config.bgm && !document.hidden && this.bgmBuffer && !this.bgmSource) {
+          this._startWebAudioBgm();
         }
       };
       document.addEventListener('visibilitychange', () => {
@@ -1978,12 +2134,20 @@ const AudioSys = {
       window.addEventListener('pagehide', pauseForBg);
       window.addEventListener('blur', pauseForBg);
       window.addEventListener('focus', resumeForFg);
+      document.addEventListener('pointerdown', unlockOnce, { passive: true });
+      document.addEventListener('touchstart', unlockOnce, { passive: true });
     }
     try {
-      if (!this.bgmAudio && ASSETS.bgm && typeof Audio !== 'undefined') {
-        this.bgmAudio = new Audio(ASSETS.bgm);
-        this.bgmAudio.loop = true;
-        this.bgmAudio.volume = 0.42;
+      const ctx = this._ensureWebAudio();
+      if (ctx) {
+        this._decodeBgm();
+        this._decodeSfx();
+      } else {
+        if (!this.bgmAudio && ASSETS.bgm && typeof Audio !== 'undefined') {
+          this.bgmAudio = new Audio(ASSETS.bgm);
+          this.bgmAudio.loop = true;
+          this.bgmAudio.volume = 0.42;
+        }
       }
       if (typeof Audio !== 'undefined') {
         ['sfx_aff', 'sfx_goal', 'sfx_msg'].forEach(k => {
@@ -1997,16 +2161,30 @@ const AudioSys = {
       }
     } catch (e) {}
   },
+
   syncBgm(on) {
-    if (!this.bgmAudio) this.init();
+    if (!this.lifecycleBound) this.init();
     this.bgmStarted = !!on;
-    if (!this.bgmAudio) return;
-    if (on && !(typeof document !== 'undefined' && document.hidden)) {
-      this.bgmAudio.play().catch(() => {});
+    if (!on) {
+      this._stopWebAudioBgm();
+      if (this.bgmAudio) {
+        try { this.bgmAudio.pause(); } catch (e) {}
+      }
+      return;
+    }
+    if (typeof document !== 'undefined' && document.hidden) return;
+    const ctx = this._ensureWebAudio();
+    if (ctx && !this.webAudioFailed) {
+      if (this.bgmBuffer) {
+        this._startWebAudioBgm();
+      } else {
+        this._decodeBgm();
+      }
     } else {
-      try { this.bgmAudio.pause(); } catch (e) {}
+      this._startFallbackBgm();
     }
   },
+
   playSfx(key) {
     if (!GameEngine.config.sfx || !ASSETS[key]) return;
     if (typeof window !== 'undefined' && typeof window.__ON_SFX__ === 'function') {
@@ -2014,6 +2192,16 @@ const AudioSys = {
     }
     if (typeof window !== 'undefined' && window.__SIM_MODE__) return;
     try {
+      if (this.ctx && !this.webAudioFailed && this.sfxBuffers[key]) {
+        if (this.ctx.state === 'suspended' && typeof this.ctx.resume === 'function') {
+          this.ctx.resume().catch(() => {});
+        }
+        const src = this.ctx.createBufferSource();
+        src.buffer = this.sfxBuffers[key];
+        src.connect(this.sfxGain);
+        src.start(0);
+        return;
+      }
       if (!this.sfxPool[key]) this.init();
       const base = this.sfxPool[key];
       if (!base) return;
@@ -2027,6 +2215,7 @@ const AudioSys = {
       }
     } catch (e) {}
   },
+
   vibrate(ms) {
     if (!GameEngine.config.vibrate || (typeof window !== 'undefined' && window.__SIM_MODE__)) return;
     try {
