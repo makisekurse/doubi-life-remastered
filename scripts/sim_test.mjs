@@ -273,6 +273,41 @@ GameEngine.userData.seenEvtIds = [];
 GameEngine.userData.persistentAttrs = {};
 console.log('[OK]   Anti-spoiler codex search verified');
 
+// 6. Achievement mapping & single-player prerequisite regression tests
+GameEngine.buildEvtList();
+const e1086 = GameEngine.evtList.find(e => e.id === 1086);
+assert(e1086 && Number(e1086.aff[0].goal) === 42, 'Event #1086 (弃文从医) must unlock goal 42, not 41');
+const e1088 = GameEngine.evtList.find(e => e.id === 1088);
+assert(e1088 && Number(e1088.aff[1].goal) === 43, 'Event #1088 (弃医从文) must unlock goal 43');
+const e1045 = GameEngine.evtList.find(e => e.id === 1045);
+assert(e1045 && e1045.aff.every(a => Number(a.goal) !== 50), 'Event #1045 must not collide with expanded goal 50');
+const e1017 = GameEngine.evtList.find(e => e.id === 1017);
+const e1019 = GameEngine.evtList.find(e => e.id === 1019);
+assert(e1017 && e1017.aff.every(a => Number(a.goal) !== 16), 'Event #1017 must not erroneously unlock goal 16');
+assert(e1019 && e1019.aff.every(a => Number(a.goal) !== 16), 'Event #1019 must not erroneously unlock goal 16');
+
+// Verify unAffCond OR logic + unBGCond blocks single character from family events (#2356, #2350, #2351, #2359)
+const singleRole = new Role('测试单身', 0);
+singleRole.setAge(70);
+singleRole.affected = ['内向'];
+singleRole.background = ['单身综合症', '医生'];
+assert(singleRole.hasAnyBG(['单身综合症']), 'Role.hasAnyBG must detect 单身综合症');
+assert(singleRole.hasAnyAff(['结婚', '内向']), 'Role.hasAnyAff must use OR semantics');
+for (const famId of [2350, 2351, 2356, 2359]) {
+  const fe = GameEngine.evtList.find(e => e.id === famId);
+  const eligible =
+    !(fe.unAffCond.length > 0 && singleRole.hasAnyAff(fe.unAffCond)) &&
+    !(fe.unBGCond.length > 0 && singleRole.hasAnyBG(fe.unBGCond)) &&
+    !(fe.background.length > 0 && !singleRole.isBackground(fe.background)) &&
+    singleRole.isAff(fe.affCond);
+  assert(!eligible, `Single player with 单身综合症 must NEVER be eligible for family event #${famId}`);
+}
+// Even if somehow tagged 结婚 + 单身综合症 simultaneously, unBGCond must still block #2356
+singleRole.affected.push('结婚');
+const fe2356 = GameEngine.evtList.find(e => e.id === 2356);
+assert(fe2356.unBGCond.length > 0 && singleRole.hasAnyBG(fe2356.unBGCond), 'Event #2356 must exclude 单身综合症 via unBGCond');
+console.log('[OK]   Achievement mappings & single/family prerequisite guards verified');
+
 // ==================== 500-LIFE RANDOMIZED SIMULATION ====================
 let sfxViolations = 0;
 let totalTurns = 0;
@@ -309,8 +344,12 @@ for (let run = 0; run < NUM_LIVES; run++) {
     const visible = evt.aff.filter(a => {
       const reqAffs = Helper.toArray(a.reqAff);
       const reqBGs = Helper.toArray(a.reqBG);
+      const unReqAffs = Helper.toArray(a.unReqAff);
+      const unReqBGs = Helper.toArray(a.unReqBG);
       if (reqAffs.length > 0 && !role.isAff(reqAffs)) return false;
       if (reqBGs.length > 0 && !role.isBackground(reqBGs)) return false;
+      if (unReqAffs.length > 0 && role.hasAnyAff(unReqAffs)) return false;
+      if (unReqBGs.length > 0 && role.hasAnyBG(unReqBGs)) return false;
       return true;
     });
     assert(visible.length > 0, `Run ${run} evt #${evt.id}: 0 visible choices!`);

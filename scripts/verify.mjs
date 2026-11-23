@@ -152,17 +152,26 @@ else ok('Original 46 achievements preserved');
 
 const badNewChoiceEvents = [];
 const badTargets = [];
-const badNewGoals = [];
+const badGoals = [];
 const deadNewTags = [];
 const badPlaceholders = [];
 const badBirths = [];
 const clicheHits = [];
+const styleViolations = [];
 const refGoals = new Set();
+
+function stripQuotes(s) {
+  return String(s || '').replace(/“[^”]*”/g, '').replace(/"[^"]*"/g, '').replace(/「[^」]*」/g, '');
+}
 
 let totalNewChoices = 0;
 let newChoicesWithEffect = 0;
+let newTitleChars = 0;
+let newPromptChars = 0;
+let newBtnChars = 0;
 let newResultChars = 0;
 let newResultCount = 0;
+let newInheritCount = 0;
 let newEventsWithDeath = 0;
 let newEventsWithHidden = 0;
 
@@ -171,9 +180,24 @@ for (const evt of htmlEvtLib) {
   const isNew = id >= 2000;
   const choices = parseRelaxedArray(evt.aff);
   const affCond = parseRelaxedArray(evt.affCond);
+  const unAffCond = parseRelaxedArray(evt.unAffCond);
   const bgCond = parseRelaxedArray(evt.background);
+  const unBGCond = parseRelaxedArray(evt.unBGCond);
 
   if (isNew) {
+    newTitleChars += String(evt.title || '').length;
+    newPromptChars += String(evt.text || '').length;
+
+    if (String(evt.title || '').length < 2 || String(evt.title || '').length > 10) {
+      styleViolations.push(`#${id} title len=${String(evt.title || '').length} ("${evt.title}")`);
+    }
+    if (String(evt.text || '').length < 12 || String(evt.text || '').length > 65) {
+      styleViolations.push(`#${id} text len=${String(evt.text || '').length}`);
+    }
+    if (/你/.test(stripQuotes(evt.text))) {
+      styleViolations.push(`#${id} text has 2nd-person 你 outside quotes`);
+    }
+
     const rawStr = JSON.stringify(evt);
     for (const w of BANNED_CLICHES) {
       if (rawStr.includes(w)) clicheHits.push(`#${id}("${w}")`);
@@ -189,11 +213,11 @@ for (const evt of htmlEvtLib) {
       if (missingDel.length > 0) badBirths.push(`#${id} (${evt.title}) has ${missingDel.length} choices missing delAff:"未出生"`);
     }
 
-    for (const a of affCond) {
-      if (!producedAffs.has(a)) deadNewTags.push(`#${id} affCond:"${a}"`);
+    for (const a of [...affCond, ...unAffCond]) {
+      if (!producedAffs.has(a)) deadNewTags.push(`#${id} aff/unAffCond:"${a}"`);
     }
-    for (const b of bgCond) {
-      if (!producedBGs.has(b) && !producedCBGs.has(b)) deadNewTags.push(`#${id} background:"${b}"`);
+    for (const b of [...bgCond, ...unBGCond]) {
+      if (!producedBGs.has(b) && !producedCBGs.has(b)) deadNewTags.push(`#${id} bg/unBGCond:"${b}"`);
     }
   }
 
@@ -204,18 +228,31 @@ for (const evt of htmlEvtLib) {
       totalNewChoices++;
       const hasEff = !!(c.plusAff || c.delAff || c.plusBG || c.delBG || c.delBG2 || c.plusCBG || c.delCBG || c.target || c.goal || htmlEvtPath[`${id}_${idx}`]);
       if (hasEff) newChoicesWithEffect++;
+      const btnStr = String(c.btn || '');
+      newBtnChars += btnStr.length;
+      if (btnStr.length < 1 || btnStr.length > 12) {
+        styleViolations.push(`#${id}[${idx}] btn len=${btnStr.length} ("${btnStr}")`);
+      }
       if (c.text && c.text !== '=INHERIT=') {
         newResultChars += c.text.length;
         newResultCount++;
+        if (c.text.length < 10 || c.text.length > 58) {
+          styleViolations.push(`#${id}[${idx}] choice.text len=${c.text.length}`);
+        }
+        if (/你/.test(stripQuotes(c.text))) {
+          styleViolations.push(`#${id}[${idx}] choice.text has 2nd-person 你 outside quotes`);
+        }
+      } else {
+        newInheritCount++;
       }
       if (toArray(c.plusAff).includes('死亡')) hasDeath = true;
       if (toArray(c.reqAff).length > 0 || toArray(c.reqBG).length > 0) hasHidden = true;
 
-      for (const a of toArray(c.reqAff)) {
-        if (!producedAffs.has(a)) deadNewTags.push(`#${id} reqAff:"${a}"`);
+      for (const a of [...toArray(c.reqAff), ...toArray(c.unReqAff)]) {
+        if (!producedAffs.has(a)) deadNewTags.push(`#${id} reqAff/unReqAff:"${a}"`);
       }
-      for (const b of toArray(c.reqBG)) {
-        if (!producedBGs.has(b) && !producedCBGs.has(b)) deadNewTags.push(`#${id} reqBG:"${b}"`);
+      for (const b of [...toArray(c.reqBG), ...toArray(c.unReqBG)]) {
+        if (!producedBGs.has(b) && !producedCBGs.has(b)) deadNewTags.push(`#${id} reqBG/unReqBG:"${b}"`);
       }
     }
 
@@ -227,7 +264,11 @@ for (const evt of htmlEvtLib) {
       const gid = String(g).trim();
       if (gid && gid !== '0') {
         refGoals.add(gid);
-        if (isNew && !goalIds.has(gid)) badNewGoals.push(`#${id} -> goal ${gid}`);
+        if (!goalIds.has(gid)) {
+          badGoals.push(`#${id} -> missing goal ${gid}`);
+        } else if (!isNew && Number(gid) >= 50) {
+          badGoals.push(`#${id} (orig) collides with expanded goal ${gid}`);
+        }
       }
     }
 
@@ -261,8 +302,8 @@ for (const k of Object.keys(htmlEvtPath)) {
   if (Number.isNaN(idx) || idx < 0 || idx >= choices.length) badEvtPath.push(`${k}(oob ${idx}/${choices.length})`);
 }
 
-// Check all expanded goals (>=50) are reachable from at least one event & cliché-free
-const unrefNewGoals = Object.keys(htmlGoalLib).filter(k => Number(k) >= 50 && !refGoals.has(String(k)));
+// Check all goals (both original & expanded) are reachable from at least one event & expanded goals cliché-free
+const unrefGoals = Object.keys(htmlGoalLib).filter(k => !refGoals.has(String(k)));
 for (const [gid, gval] of Object.entries(htmlGoalLib)) {
   if (Number(gid) < 50) continue;
   const gStr = JSON.stringify(gval);
@@ -278,11 +319,11 @@ if (badBirths.length) fail(`Birth events missing delAff:"未出生": ${badBirths
 if (badTargets.length) fail(`Broken target refs (${badTargets.length}): ${badTargets.slice(0, 5).join('; ')}`);
 else ok('All event target references resolve');
 
-if (badNewGoals.length) fail(`Broken expanded goal refs (${badNewGoals.length}): ${badNewGoals.slice(0, 5).join('; ')}`);
-else ok('All expanded event goal references resolve');
+if (badGoals.length) fail(`Broken or colliding goal refs (${badGoals.length}): ${badGoals.slice(0, 10).join('; ')}`);
+else ok('All event goal references resolve with zero original/expanded collisions');
 
-if (unrefNewGoals.length) fail(`Unreferenced expanded goals (>=50): ${unrefNewGoals.join(', ')}`);
-else ok(`All ${Object.keys(htmlGoalLib).length - origGoalCount} expanded achievements are referenced`);
+if (unrefGoals.length) fail(`Unreferenced achievements (${unrefGoals.length}): ${unrefGoals.join(', ')}`);
+else ok(`All ${Object.keys(htmlGoalLib).length} achievements (46 orig + ${Object.keys(htmlGoalLib).length - origGoalCount} expanded) are reachable`);
 
 if (deadNewTags.length) fail(`Unproduced tags referenced in expanded events (${deadNewTags.length}): ${deadNewTags.slice(0, 10).join('; ')}`);
 else ok('Zero unproduced tags in expanded events');
@@ -291,6 +332,9 @@ if (badEvtPath.length) fail(`Invalid evtPath keys (${badEvtPath.length}): ${badE
 else ok('All evtPath keys map to valid event choices');
 
 if (badPlaceholders.length) fail(`Invalid placeholders: ${badPlaceholders.slice(0, 5).join(', ')}`);
+
+if (styleViolations.length) fail(`Expanded style/length/pronoun violations (${styleViolations.length}): ${styleViolations.slice(0, 10).join('; ')}`);
+else ok('All expanded events pass original-style conciseness, single-line buttons, and 3rd-person checks');
 
 if (clicheHits.length) {
   const msg = `Banned AI cliché hits in expanded events (${clicheHits.length}): ${clicheHits.slice(0, 10).join(', ')}`;
@@ -306,7 +350,7 @@ const versionCode = manifest.readUInt32LE(2472);
 const minSdk = manifest.readUInt32LE(2568);
 ok(`Android template ready (manifest=${manifest.length} B, versionCode=${versionCode}, minSdk=${minSdk}, classes.dex=${fs.statSync(path.join(ROOT, 'android/classes.dex')).size} B)`);
 
-info(`Expanded quality telemetry: events=${newEvts.length}, avgChoices=${(totalNewChoices / Math.max(1, newEvts.length)).toFixed(2)}, choiceEffectRate=${((newChoicesWithEffect / Math.max(1, totalNewChoices)) * 100).toFixed(1)}%, avgOutcomeLen=${(newResultChars / Math.max(1, newResultCount)).toFixed(1)} chars, deathEvts=${newEventsWithDeath} (${((newEventsWithDeath / Math.max(1, newEvts.length)) * 100).toFixed(1)}%), hiddenChoiceEvts=${newEventsWithHidden}`);
+info(`Expanded quality telemetry: events=${newEvts.length}, avgTitle=${(newTitleChars / Math.max(1, newEvts.length)).toFixed(1)}, avgPrompt=${(newPromptChars / Math.max(1, newEvts.length)).toFixed(1)}, avgBtn=${(newBtnChars / Math.max(1, totalNewChoices)).toFixed(1)}, avgOutcome=${(newResultChars / Math.max(1, newResultCount)).toFixed(1)} (=INHERIT=${newInheritCount}), avgChoices=${(totalNewChoices / Math.max(1, newEvts.length)).toFixed(2)}, choiceEffectRate=${((newChoicesWithEffect / Math.max(1, totalNewChoices)) * 100).toFixed(1)}%, deathEvts=${newEventsWithDeath} (${((newEventsWithDeath / Math.max(1, newEvts.length)) * 100).toFixed(1)}%), hiddenChoiceEvts=${newEventsWithHidden}`);
 
 if (failed) {
   console.error('\nVerification FAILED.');
